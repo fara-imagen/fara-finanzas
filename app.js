@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -290,7 +290,7 @@ function vistaMes() {
 
   const compras = `<button class="item" data-a="ir" data-v="reservas">
       <span class="codigo codigo--gasto">${ICO.reservas}</span>
-      <span class="item__cuerpo"><span class="item__titulo">Reservas</span><span class="micro">Plata apartada para equipo, impuestos y compras</span></span>
+      <span class="item__cuerpo"><span class="item__titulo">Reservas</span><span class="micro">Renuncia, equipo y próximas compras</span></span>
       <span class="item__monto num">${plata(totalReservado())}</span></button>`;
 
   return `
@@ -309,8 +309,7 @@ function vistaMes() {
       <div class="pila"><span class="micro">Entró</span><span class="subtitulo num">${plata(entro)}</span></div>
       <div class="pila"><span class="micro">Salió</span><span class="subtitulo num">${plata(salio)}</span></div>
     </div>
-    <div class="fila" style="margin-top:12px"><span class="micro">${retirosDelMes(ym) ? `Te pagaste ${plata(retirosDelMes(ym))} este mes.` : 'Todavía no te pagaste este mes.'}</span>
-      <button class="btn btn--primario btn--chico" data-a="retiro" style="flex:none;white-space:nowrap">Pagarme a mí</button></div>
+    <div class="grilla2" style="margin-top:14px"><button class="btn btn--chico btn--en-oscuro" data-a="aporte">Poner plata</button><button class="btn btn--primario btn--chico" data-a="retiro">Pagarme a mí</button></div>
   </section>
 
   <div class="grilla2">
@@ -323,6 +322,8 @@ function vistaMes() {
       ${atrP ? `<span class="estado estado--mal">${atrP} vencido${atrP > 1 ? 's' : ''}</span>` : `<span class="micro">${pp.length} pago${pp.length === 1 ? '' : 's'}</span>`}
     </button>
   </div>
+
+  ${bloqueSostiene(ym)}
 
   <section class="bloque">
     <p class="etiqueta">Punto de equilibrio</p>
@@ -1159,6 +1160,7 @@ function tablas() {
     Compras: T(['id', 'Ítem', 'Precio', 'Moneda', 'Meses', 'Ahorrado', 'Por mes'],
       D.compras.map(c => [c.id, c.item, c.precio, c.moneda, c.meses, c.ahorrado, Math.round(planCompra(c).porMes * 100) / 100])),
     Clientes: T(['Código', 'Nombre'], D.clientes.map(c => [c.codigo, c.nombre])),
+    'Aportes del dueño': T(['Fecha', 'Monto', 'Moneda', 'Desde', 'Para qué'], (D.reservas ? D.reservas.aportes : []).map(x => [x.fecha, x.monto, x.moneda, x.medio, x.nota])),
     Reservas: T(['Tipo', 'Fecha', 'Monto', 'Movimiento', 'Nota'], (D.reservas ? D.reservas.movs : []).map(m => [TIPOS_RES[m.tipo].nombre, m.fecha, m.monto, m.monto < 0 ? 'Usado' : 'Apartado', m.nota])),
     'P · Movimientos': T(['id', 'Tipo', 'Fecha', 'Descripción', 'Categoría', 'Va a', 'Monto', 'Moneda', 'Compartido', 'Tu parte %', 'Tu parte $', 'Medio', 'Estado', 'Vence', 'Cuota', 'Fijo', 'Nota'],
       D.personal.movs.map(m => [m.id, m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', fechaMov(m), m.descripcion, m.categoria, destinoTexto(m), m.monto, m.moneda, m.compartido ? 'Sí' : 'No', m.compartido ? m.parte : 100,
