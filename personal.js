@@ -343,7 +343,9 @@ function pVistaAjustes() {
   <section class="bloque">
     <h2 class="subtitulo">Respaldo y dólar</h2>
     <p class="micro" style="margin:4px 0 10px">Son los mismos que FÁRA: un solo Sheet guarda las dos partes, cada una en sus pestañas. ${a.sheetUrl ? (a.pendiente ? 'Hay cambios sin subir.' : 'Todo respaldado.') : 'Todavía sin conectar.'}</p>
-    <button class="btn btn--suave btn--chico" data-a="modo" data-v="fara" data-tab="ajustes">Ir a Ajustes de FÁRA</button>
+    <div class="acciones" style="flex-wrap:wrap"><button class="btn btn--suave btn--chico" data-a="modo" data-v="fara" data-tab="ajustes">Ir a Ajustes de FÁRA</button>
+    <button class="btn btn--suave btn--chico" data-a="actualizarApp">Actualizar app</button></div>
+    <p class="micro" style="margin-top:8px">Versión ${VERSION}</p>
   </section>`;
 }
 

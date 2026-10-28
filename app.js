@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.3.1';
+const VERSION = '1.3.2';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -573,7 +573,9 @@ function vistaAjustes() {
     </div>
     <hr class="sep">
     <button class="btn btn--peligro btn--chico" data-a="borrarTodo">Borrar todo y empezar de cero</button>
-    <p class="micro" style="margin-top:12px">FÁRA Finanzas ${VERSION}</p>
+    <hr class="sep">
+    <div class="fila"><span class="micro">FÁRA Finanzas ${VERSION}</span><button class="btn btn--suave btn--chico" data-a="actualizarApp">Actualizar app</button></div>
+    <p class="micro" style="margin-top:6px">Baja la última versión. Tus datos no se tocan.</p>
   </section>`;
 }
 
@@ -1000,6 +1002,15 @@ const ACC = {
     l.splice(+el.dataset.i, 1); guardar(); pintar(); abrirDetalle(el.dataset.lista);
   },
   actualizarMep() { actualizarMep(true); },
+  async actualizarApp() {
+    if (!navigator.onLine) return toast('Necesitás internet para actualizar');
+    toast('Buscando la última versión…');
+    try {
+      if ('serviceWorker' in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+      if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+    } catch (e) { }
+    location.replace(location.pathname + '?v=' + Date.now());
+  },
   restaurar() { restaurar(); },
   exportarJSON() { descargar(`fara-finanzas-${hoyISO()}.json`, JSON.stringify(D, null, 1), 'application/json'); },
   exportarCSV() {

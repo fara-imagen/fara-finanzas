@@ -1,12 +1,13 @@
 /* FÁRA Finanzas · service worker: guarda una copia de la app en el teléfono para que abra sin internet. */
-const VERSION = 'fara-finanzas-1.3.1';
+const VERSION = 'fara-finanzas-1.3.2';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'app.js', 'personal.js', 'manifest.webmanifest',
   'icons/logo.svg', 'icons/logo-negativo.svg', 'icons/simbolo.svg', 'icons/simbolo-alt.svg', 'icons/favicon-32.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // cache: 'reload' evita guardar una copia vieja que el navegador tenga en memoria
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
