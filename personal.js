@@ -38,12 +38,24 @@ function pPendientes(tipo) {
   return P().movs.filter(m => m.tipo === tipo && !m.pagado).map(m => ({ m, ars: miARS(m, mep()), atrasado: !!(m.vence && m.vence < hoy) }))
     .sort((a, b) => (a.m.vence || '9').localeCompare(b.m.vence || '9'));
 }
+/* gastos que van a una meta: cuentan como salida y también suman a la meta */
+const conv = (n, de, a, cot) => de === a ? n : de === 'USD' ? n * (cot || mep()) : n / (cot || mep());
+const movsDeMeta = (meta) => P().movs.filter(m => m.tipo === 'gasto' && m.pagado && m.meta === meta.id);
 function pAportesDelMes(ym) {
   const out = [];
-  for (const meta of P().metas) for (const ap of meta.aportes || []) if (mesDe(ap.fecha) === ym) out.push({ meta, ap, ars: aARS(ap.monto, meta.moneda, ap.mep) });
+  for (const meta of P().metas) {
+    for (const ap of meta.aportes || []) if (mesDe(ap.fecha) === ym) out.push({ meta, ap, ars: aARS(ap.monto, meta.moneda, ap.mep) });
+    for (const m of movsDeMeta(meta)) if (mesDe(fechaMov(m)) === ym) out.push({ meta, mov: m, ars: miARS(m) });
+  }
   return out;
 }
-const pAhorrado = (meta) => (meta.aportes || []).reduce((s, a) => s + a.monto, 0);
+const pAhorrado = (meta) => (meta.aportes || []).reduce((s, a) => s + a.monto, 0)
+  + movsDeMeta(meta).reduce((s, m) => s + conv(m.monto * parteDe(m), m.moneda, meta.moneda, m.mep), 0);
+function destinoTexto(m) {
+  if (m.meta) { const x = P().metas.find(t => t.id === m.meta); return x ? x.nombre : ''; }
+  if (m.fondo) { const x = P().fondos.find(t => t.id === m.fondo); return x ? x.nombre : ''; }
+  return '';
+}
 
 function pGenerarFijos() {
   const ym = mesActual(); let cambio = false;
@@ -92,6 +104,7 @@ function pVistaMes() {
       <div class="pila"><span class="micro">Entró</span><span class="subtitulo num">${plata(entro)}</span></div>
       <div class="pila"><span class="micro">Salió (tu parte)</span><span class="subtitulo num">${plata(salio)}</span></div>
     </div>
+    ${(() => { const ah = gas.filter(x => x.m.meta || x.m.fondo).reduce((s, x) => s + x.ars, 0); return ah ? `<p class="micro num" style="margin-top:10px">De lo que salió, ${plata(ah)} fue a ahorro o inversión.</p>` : ''; })()}
   </section>
 
   <div class="grilla2">
@@ -155,8 +168,9 @@ function pVistaMovs() {
 function pItem(m) {
   const ing = m.tipo === 'ingreso';
   const atr = !m.pagado && m.vence && m.vence < hoyISO();
-  const extra = [m.cuotas > 1 ? `Cuota ${m.cuotaN}/${m.cuotas}` : '', m.compartido ? `Compartido · ${m.parte}%` : ''].filter(Boolean).join(' · ');
-  const est = m.pagado ? `<span class="micro">${h(m.categoria)}${extra ? ' · ' + extra : ''}</span>`
+  const dest = destinoTexto(m);
+  const extra = [dest ? `→ ${dest}` : '', m.cuotas > 1 ? `Cuota ${m.cuotaN}/${m.cuotas}` : '', m.compartido ? `Compartido · ${m.parte}%` : ''].filter(Boolean).join(' · ');
+  const est = m.pagado ? `<span class="micro">${dest ? '' : h(m.categoria)}${extra ? (dest ? '' : ' · ') + h(extra) : ''}</span>`
     : `<span class="estado ${atr ? 'estado--mal' : 'estado--pend'}">${ing ? 'Por cobrar' : atr ? 'Vencido' : 'Por pagar'}${m.vence ? ' · ' + fechaCorta(m.vence) : ''}</span>`;
   return `<button class="item" data-a="pEditar" data-id="${m.id}">
     <span class="codigo ${ing ? '' : 'codigo--gasto'}">${ing ? ICO.ingreso : m.fijoId ? ICO.fijo : m.cuotas > 1 ? ICO.cuotas : ICO.gasto}</span>
@@ -190,7 +204,7 @@ function pVistaAhorro() {
     <div class="fila"><p class="etiqueta">Fondos · ${nombreMes(ym)}</p><button class="link" data-a="ir" data-v="ajustes">Editar</button></div>
     <p class="micro" style="margin:6px 0 4px">Cómo repartiste lo que entró este mes (${plata(ingresos)}) contra tu reparto ideal.${totalIdeal !== 100 ? ` <span class="mal">Tus ideales suman ${totalIdeal} %.</span>` : ''}</p>
     ${P().fondos.map(f => {
-      const enGastos = gas.filter(x => f.cats.includes(x.m.categoria)).reduce((s, x) => s + x.ars, 0);
+      const enGastos = gas.filter(x => !x.m.meta && (x.m.fondo ? x.m.fondo === f.id : f.cats.includes(x.m.categoria))).reduce((s, x) => s + x.ars, 0);
       const enMetas = aps.filter(x => x.meta.fondo === f.id).reduce((s, x) => s + x.ars, 0);
       const real = enGastos + enMetas, pctReal = ingresos ? real / ingresos * 100 : 0;
       const ideal = f.ideal || 0;
@@ -199,7 +213,7 @@ function pVistaAhorro() {
         <div class="barra barra--fondo"><i style="width:${Math.min(100, pctReal)}%"></i><b style="left:${Math.min(100, ideal)}%"></b></div>
         <p class="micro num" style="margin:4px 0 0">${plata(real)}${ingresos ? ` · ideal ${plata(ingresos * ideal / 100)}` : ''}</p></div>`;
     }).join('')}
-    <p class="micro" style="margin-top:8px">La rayita marca tu ideal. Los gastos cuentan por categoría y el ahorro por la meta a la que lo sumás.</p>
+    <p class="micro" style="margin-top:8px">La rayita marca tu ideal. Los gastos cuentan por su categoría; lo que mandás a una meta o a un fondo cuenta ahí.</p>
   </section>`;
 }
 
@@ -347,7 +361,15 @@ function pFormMov(m, tipoInicial = 'gasto') {
       <button type="button" class="${ing ? 'is-on' : ''}" data-a="pTipo" data-v="ingreso">Ingreso</button></div>` : `<input type="hidden" name="tipo" value="${m.tipo}">`}
     ${campoMonto('monto', nuevo ? m.monto : m.monto, m.moneda, esCuota ? 'Monto de esta cuota' : ing ? 'Monto' : 'Monto total')}
     <label class="campo"><span>${ing ? 'De dónde' : 'Qué fue'}</span><input class="input" name="descripcion" value="${h(m.descripcion)}" placeholder="${ing ? 'Ej.: Sueldo de octubre' : 'Ej.: Supermercado'}"></label>
-    <div class="campo"><span>Categoría</span><div data-cats>${chips('categoria', cats, m.categoria || cats[0])}</div></div>
+    <div data-solo-gasto ${ing ? 'hidden' : ''}>
+      <label class="campo"><span>¿Va a ahorro o inversión?</span>
+        <select class="input" name="destino">
+          <option value="">No, es un gasto</option>
+          ${P().metas.length ? `<optgroup label="Metas">${P().metas.map(x => `<option value="meta:${x.id}" ${m.meta === x.id ? 'selected' : ''}>${h(x.nombre)}</option>`).join('')}</optgroup>` : ''}
+          <optgroup label="Fondos">${P().fondos.map(x => `<option value="fondo:${x.id}" ${m.fondo === x.id ? 'selected' : ''}>${h(x.nombre)}</option>`).join('')}</optgroup>
+        </select></label>
+    </div>
+    <div class="campo" data-cat-campo ${!ing && (m.meta || m.fondo) ? 'hidden' : ''}><span>Categoría</span><div data-cats>${chips('categoria', cats, m.categoria && m.categoria !== 'Ahorro' ? m.categoria : cats[0])}</div></div>
     <div class="campo"><span>${ing ? 'Dónde entró' : 'Medio de pago'}</span>${chips('medio', P().listas.medio, m.medio)}</div>
     <div data-solo-gasto ${ing ? 'hidden' : ''}>
       ${interruptor('compartido', 'Compartido', m.compartido, 'Cuenta solo tu parte')}
@@ -372,8 +394,10 @@ function pGuardarMov(form, d) {
   const monto = leerMonto(d.monto);
   if (!monto) return toast('Poné un monto');
   const tipo = d.tipo;
+  const [dTipo, dId] = tipo === 'gasto' && d.destino ? d.destino.split(':') : ['', ''];
   const comun = {
-    tipo, descripcion: d.descripcion.trim(), categoria: d.categoria, medio: d.medio, moneda: d.moneda, nota: d.nota.trim(),
+    tipo, descripcion: d.descripcion.trim(), categoria: dTipo ? 'Ahorro' : d.categoria,
+    meta: dTipo === 'meta' ? dId : '', fondo: dTipo === 'fondo' ? dId : '', medio: d.medio, moneda: d.moneda, nota: d.nota.trim(),
     compartido: tipo === 'gasto' && !!d.compartido, parte: Math.min(100, Math.max(1, parseInt(d.parte) || 50))
   };
   if (!id && tipo === 'gasto' && d.enCuotas) {
@@ -449,10 +473,16 @@ function pVerMeta(meta) {
       <div class="acciones"><button class="btn btn--primario">Guardar</button></div>
     </form>
     <p class="etiqueta" style="margin-top:16px">Movimientos</p>
-    <div class="lista">${[...(meta.aportes || [])].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 12).map(ap => `
+    <div class="lista">${[
+      ...(meta.aportes || []).map(ap => ({ f: ap.fecha, html: `
       <div class="item item--plano"><span class="item__cuerpo"><span class="item__titulo">${ap.monto < 0 ? 'Retiro' : 'Aporte'}</span><span class="micro">${fechaCorta(ap.fecha)}</span></span>
       <span class="item__monto num ${ap.monto < 0 ? 'mal' : 'ok'}">${plata(ap.monto, meta.moneda)}</span>
-      <button class="quitar" data-a="pBorrarAporte" data-id="${meta.id}" data-ap="${ap.id}" aria-label="Borrar">×</button></div>`).join('') || '<p class="micro">Todavía sin aportes.</p>'}</div>
+      <button class="quitar" data-a="pBorrarAporte" data-id="${meta.id}" data-ap="${ap.id}" aria-label="Borrar">×</button></div>` })),
+      ...movsDeMeta(meta).map(m => ({ f: fechaMov(m), html: `
+      <button class="item item--plano" data-a="pEditar" data-id="${m.id}"><span class="item__cuerpo"><span class="item__titulo">${h(m.descripcion || 'Desde movimientos')}</span><span class="micro">${fechaCorta(fechaMov(m))} · cargado como gasto</span></span>
+      <span class="item__monto num ok">${plata(m.monto * parteDe(m), m.moneda)}</span></button>` }))
+    ].sort((x, y) => y.f.localeCompare(x.f)).slice(0, 15).map(x => x.html).join('') || '<p class="micro">Todavía sin aportes.</p>'}</div>
+    <p class="micro" style="margin-top:6px">También podés sumar a esta meta desde Movimientos: cargás un gasto y elegís la meta en "¿Va a ahorro o inversión?".</p>
     <div class="acciones"><button class="btn btn--suave" data-a="pEditarMeta" data-id="${meta.id}">Editar meta</button></div>`);
 }
 function pFormFondo(f) {
@@ -527,7 +557,8 @@ Object.assign(ACC, {
     $$('button', g).forEach(b => b.classList.toggle('is-on', b === el));
     const form = el.closest('form');
     $('[data-cats]', form).innerHTML = chips('categoria', P().listas[tipo], P().listas[tipo][0]);
-    const sg = $('[data-solo-gasto]', form); if (sg) sg.hidden = tipo !== 'gasto';
+    $$('[data-solo-gasto]', form).forEach(sg => sg.hidden = tipo !== 'gasto');
+    if (tipo !== 'gasto' && form.destino) { form.destino.value = ''; $('[data-cat-campo]', form).hidden = false; }
     if (tipo !== 'gasto') { const c = form.enCuotas; if (c && c.checked) { c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); } }
   },
   pSigno(el) { const g = el.closest('[data-grupo="signo"]'); $('input', g).value = el.dataset.v; $$('button', g).forEach(b => b.classList.toggle('is-on', b === el)); },
@@ -560,6 +591,7 @@ Object.assign(ACC, {
 
 document.addEventListener('change', (ev) => {
   const el = ev.target;
+  if (el.name === 'destino') { const c = $('[data-cat-campo]', el.form); if (c) c.hidden = !!el.value; return; }
   if (el.dataset.a !== 'pRenombrar') return;
   const lista = el.dataset.lista, i = +el.dataset.i, nuevo = el.value.trim();
   const l = P().listas[lista], viejo = l[i];

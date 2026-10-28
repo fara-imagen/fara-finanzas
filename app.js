@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -1123,15 +1123,16 @@ function tablas() {
     Compras: T(['id', 'Ítem', 'Precio', 'Moneda', 'Meses', 'Ahorrado', 'Por mes'],
       D.compras.map(c => [c.id, c.item, c.precio, c.moneda, c.meses, c.ahorrado, Math.round(planCompra(c).porMes * 100) / 100])),
     Clientes: T(['Código', 'Nombre'], D.clientes.map(c => [c.codigo, c.nombre])),
-    'P · Movimientos': T(['id', 'Tipo', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Moneda', 'Compartido', 'Tu parte %', 'Tu parte $', 'Medio', 'Estado', 'Vence', 'Cuota', 'Fijo', 'Nota'],
-      D.personal.movs.map(m => [m.id, m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', fechaMov(m), m.descripcion, m.categoria, m.monto, m.moneda, m.compartido ? 'Sí' : 'No', m.compartido ? m.parte : 100,
+    'P · Movimientos': T(['id', 'Tipo', 'Fecha', 'Descripción', 'Categoría', 'Va a', 'Monto', 'Moneda', 'Compartido', 'Tu parte %', 'Tu parte $', 'Medio', 'Estado', 'Vence', 'Cuota', 'Fijo', 'Nota'],
+      D.personal.movs.map(m => [m.id, m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', fechaMov(m), m.descripcion, m.categoria, destinoTexto(m), m.monto, m.moneda, m.compartido ? 'Sí' : 'No', m.compartido ? m.parte : 100,
         Math.round(miARS(m, m.mep || mep())), m.medio, m.pagado ? (m.tipo === 'ingreso' ? 'Cobrado' : 'Pagado') : (m.tipo === 'ingreso' ? 'Por cobrar' : 'Por pagar'), m.vence, m.cuotas > 1 ? `${m.cuotaN}/${m.cuotas}` : '', m.fijoId ? 'Sí' : 'No', m.nota])),
     'P · Fijos': T(['id', 'Tipo', 'Nombre', 'Categoría', 'Monto', 'Moneda', 'Día', 'Medio', 'Compartido', 'Tu parte %', 'Activo'],
       D.personal.fijos.map(f => [f.id, f.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', f.descripcion, f.categoria, f.monto, f.moneda, f.dia, f.medio, f.compartido ? 'Sí' : 'No', f.compartido ? f.parte : 100, f.activo ? 'Sí' : 'No'])),
     'P · Ahorro': T(['Meta', 'Objetivo', 'Moneda', 'Ahorrado', 'Para cuándo', 'Fondo'],
       D.personal.metas.map(m => [m.nombre, m.objetivo, m.moneda, pAhorrado(m), m.fecha, (D.personal.fondos.find(f => f.id === m.fondo) || {}).nombre || ''])),
-    'P · Aportes': T(['Meta', 'Fecha', 'Monto', 'Moneda'],
-      D.personal.metas.flatMap(m => (m.aportes || []).map(ap => [m.nombre, ap.fecha, ap.monto, m.moneda])))
+    'P · Aportes': T(['Meta', 'Fecha', 'Monto', 'Moneda', 'Origen'],
+      D.personal.metas.flatMap(m => [...(m.aportes || []).map(ap => [m.nombre, ap.fecha, ap.monto, m.moneda, 'Directo en la meta']),
+        ...movsDeMeta(m).map(x => [m.nombre, fechaMov(x), x.monto * parteDe(x), x.moneda, 'Desde movimientos'])]))
   };
 }
 let timerResp, respaldando = false, conectando = false;
