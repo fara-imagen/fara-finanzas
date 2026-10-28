@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.3.3';
+const VERSION = '1.4.0';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -344,6 +344,17 @@ function vistaMes() {
         <span class="micro ${x.atrasado ? 'mal' : ''}">${x.atrasado ? 'Venció el ' : 'Vence el '}${fechaCorta(x.g.vence)}</span></span>
         <span class="item__monto num">${plata(x.g.monto, x.g.moneda)}</span></button>`).join('')}</div></section>`;
   })()}
+  ${(() => {
+    const cm = D.gastos.filter(g => g.cuotas > 1 && mesDe(g.fecha) === ym), fut = D.gastos.filter(g => g.cuotas > 1 && mesDe(g.fecha) > ym);
+    if (!cm.length && !fut.length) return '';
+    const nm = new Set(fut.map(g => mesDe(g.fecha))).size;
+    return `<section class="bloque"><p class="etiqueta">Cuotas</p>
+      ${cm.length ? `<div class="lista">${cm.map(g => `<button class="item item--plano" data-a="editarGasto" data-id="${g.id}">
+        <span class="item__cuerpo"><span class="item__titulo">${h(g.descripcion || g.categoria)}</span><span class="micro">Cuota ${g.cuotaN} de ${g.cuotas}</span></span>
+        <span class="item__monto num">${plata(g.monto, g.moneda)}</span></button>`).join('')}</div>` : '<p class="micro" style="margin-top:8px">No hay cuotas este mes.</p>'}
+      ${fut.length ? `<p class="chico" style="margin-top:12px">Comprometido en cuotas para los próximos ${nm} mes${nm > 1 ? 'es' : ''}: <strong class="num">${plata(fut.reduce((s, g) => s + aARS(g.monto, g.moneda), 0))}</strong>.</p>` : ''}
+    </section>`;
+  })()}
   ${compras}
   ${mono}
   <button class="item" data-a="ir" data-v="analisis" style="margin-top:12px">
@@ -422,26 +433,27 @@ function vistaGastos() {
   let lista = [...D.gastos];
   if (f === 'mes') lista = lista.filter(g => mesDe(g.fechaPago || g.fecha) === UI.mes || (!g.pagado && mesDe(g.fecha) === UI.mes));
   if (f === 'pend') lista = lista.filter(g => !g.pagado);
+  if (f === 'cuotas') lista = lista.filter(g => g.cuotas > 1);
   lista.sort((a, b) => (b.fechaPago || b.fecha).localeCompare(a.fechaPago || a.fecha));
   const chip = (v, txt) => `<button class="chip ${f === v ? 'is-on' : ''}" data-a="filtroG" data-v="${v}">${txt}</button>`;
   const grupos = new Map();
-  for (const g of lista) { const k = f === 'todos' ? mesDe(g.fecha) : (g.fechaPago || g.fecha); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(g); }
+  for (const g of lista) { const k = f === 'todos' || f === 'cuotas' ? mesDe(g.fecha) : (g.fechaPago || g.fecha); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(g); }
   const tot = gastosPagadosDelMes(UI.mes).reduce((s, x) => s + x.ars, 0);
   return `
   <h1 class="titulo">Gastos</h1>
   <p class="chico sec" style="margin:0 0 12px">Pagaste <strong class="num">${plata(tot)}</strong> en ${nombreMes(UI.mes)}.</p>
-  <div class="chips chips--scroll">${chip('mes', 'Este mes')}${chip('pend', 'Por pagar')}${chip('todos', 'Todos')}</div>
+  <div class="chips chips--scroll">${chip('mes', 'Este mes')}${chip('pend', 'Por pagar')}${chip('cuotas', 'Cuotas')}${chip('todos', 'Todos')}</div>
   ${lista.length ? [...grupos.entries()].map(([k, gs]) => `
-    <p class="etiqueta grupo">${f === 'todos' ? nombreMes(k) : fechaLarga(k)}</p>
+    <p class="etiqueta grupo">${f === 'todos' || f === 'cuotas' ? nombreMes(k) : fechaLarga(k)}</p>
     <div class="lista">${gs.map(itemGasto).join('')}</div>`).join('')
     : `<div class="lista">${vacio('No hay gastos acá.', 'Tocá + para cargar uno.')}</div>`}`;
 }
 function itemGasto(g) {
   const atr = !g.pagado && g.vence && g.vence < hoyISO();
-  const est = g.pagado ? `<span class="micro">${h(g.medio || '')}</span>`
+  const est = g.pagado ? `<span class="micro">${g.cuotas > 1 ? `Cuota ${g.cuotaN}/${g.cuotas} · ` : ''}${h(g.medio || '')}</span>`
     : `<span class="estado ${atr ? 'estado--mal' : 'estado--pend'}">${atr ? 'Vencido' : 'Por pagar'}${g.vence ? ' · ' + fechaCorta(g.vence) : ''}</span>`;
   return `<button class="item" data-a="editarGasto" data-id="${g.id}">
-    <span class="codigo codigo--gasto">${g.fijoId ? ICO.fijo : ICO.gasto}</span>
+    <span class="codigo codigo--gasto">${g.fijoId ? ICO.fijo : g.cuotas > 1 ? ICO.cuotas : ICO.gasto}</span>
     <span class="item__cuerpo"><span class="item__titulo">${h(g.descripcion || g.categoria)}</span>
       <span class="micro">${h(g.categoria)}</span><span style="display:block;margin-top:2px">${est}</span></span>
     <span class="item__monto num">${plata(g.monto, g.moneda)}</span></button>`;
@@ -637,21 +649,40 @@ const interruptor = (nombre, txt, on, sub = '') => `<label class="interruptor"><
 function formGasto(g) {
   const nuevo = !g;
   g = g || { fecha: hoyISO(), monto: 0, moneda: 'ARS', categoria: '', medio: A().medioGasto, pagado: true, vence: '', descripcion: '', nota: '' };
-  abrirHoja(nuevo ? 'Nuevo gasto' : 'Editar gasto', `
+  abrirHoja(nuevo ? 'Nuevo gasto' : g.cuotas > 1 ? `Cuota ${g.cuotaN} de ${g.cuotas}` : 'Editar gasto', `
   <form data-form="gasto" data-id="${g.id || ''}">
     ${campoMonto('monto', g.monto, g.moneda)}
     <label class="campo"><span>Qué fue</span><input class="input" name="descripcion" value="${h(g.descripcion)}" placeholder="Ej.: Fondo blanco infinito"></label>
     <div class="campo"><span>Categoría</span>${chips('categoria', D.listas.gasto, g.categoria || D.listas.gasto[0])}</div>
     <div class="campo"><span>Medio de pago</span>${chips('medio', D.listas.medio, g.medio)}</div>
+    ${nuevo ? `${interruptor('enCuotas', 'En cuotas', false, 'Se carga una cuota por mes')}
+    <div data-si="enCuotas" hidden><div class="grilla2">
+      <label class="campo"><span>Cantidad de cuotas</span><input class="input" name="cuotas" inputmode="numeric" value="3"></label>
+      <label class="campo"><span>Primera cuota</span><input class="input" type="month" name="primera" value="${mesActual()}"></label></div>
+      <p class="ayuda">Poné arriba el total de la compra; la app lo divide.</p></div>` : ''}
+    <div data-no="enCuotas">
     ${interruptor('pagado', 'Ya está pagado', g.pagado)}
     <div data-si="pagado" ${g.pagado ? '' : 'hidden'}><label class="campo"><span>Fecha de pago</span><input class="input" type="date" name="fechaPago" value="${g.fechaPago || g.fecha}"></label></div>
     <div data-no="pagado" ${g.pagado ? 'hidden' : ''}><label class="campo"><span>Vence el</span><input class="input" type="date" name="vence" value="${g.vence || ''}"></label></div>
+    </div>
     <label class="campo"><span>Nota (opcional)</span><input class="input" name="nota" value="${h(g.nota)}"></label>
-    <div class="acciones">${nuevo ? '' : '<button type="button" class="btn btn--peligro" data-a="borrarGasto" data-id="' + g.id + '">Borrar</button>'}<button class="btn btn--primario">Guardar</button></div>
+    <div class="acciones">${nuevo ? '' : '<button type="button" class="btn btn--peligro" data-a="borrarGasto" data-id="' + g.id + '">' + (g.cuotas > 1 ? 'Borrar cuotas' : 'Borrar') + '</button>'}<button class="btn btn--primario">Guardar</button></div>
   </form>`);
 }
 function guardarGasto(form, datos) {
   const id = form.dataset.id;
+  if (!id && datos.enCuotas) {
+    const total = leerMonto(datos.monto); if (!total) return toast('Poné un monto');
+    const n = Math.min(60, Math.max(2, parseInt(datos.cuotas) || 2)), grupo = uid();
+    const dia = String(Math.min(28, +hoyISO().slice(8, 10))).padStart(2, '0'), primera = datos.primera || mesActual();
+    for (let i = 0; i < n; i++) {
+      const f = `${sumarMes(primera, i)}-${dia}`;
+      D.gastos.push({ id: uid(), fecha: f, fechaPago: f, pagado: true, vence: '', monto: Math.round(total / n * 100) / 100, moneda: datos.moneda,
+        descripcion: datos.descripcion.trim(), categoria: datos.categoria, medio: datos.medio, nota: datos.nota.trim(), mep: mep(), grupo, cuotas: n, cuotaN: i + 1 });
+    }
+    if (datos.medio) A().medioGasto = datos.medio;
+    guardar(); cerrarHoja(); toast(`${n} cuotas cargadas`); pintar(); return;
+  }
   const pagado = !!datos.pagado;
   const base = id ? D.gastos.find(x => x.id === id) : { id: uid(), mep: mep() };
   Object.assign(base, {
@@ -941,7 +972,12 @@ const ACC = {
   },
   // gastos
   editarGasto(el) { formGasto(D.gastos.find(g => g.id === el.dataset.id)); },
-  borrarGasto(el) { if (!confirm('¿Borrar este gasto?')) return; D.gastos = D.gastos.filter(g => g.id !== el.dataset.id); guardar(); cerrarHoja(); pintar(); toast('Gasto borrado'); },
+  borrarGasto(el) {
+    const g = D.gastos.find(x => x.id === el.dataset.id);
+    if (g.grupo && g.cuotas > 1) { if (!confirm(`¿Borrar las ${g.cuotas} cuotas de "${g.descripcion || g.categoria}"?`)) return; D.gastos = D.gastos.filter(x => x.grupo !== g.grupo); }
+    else { if (!confirm('¿Borrar este gasto?')) return; D.gastos = D.gastos.filter(x => x !== g); }
+    guardar(); cerrarHoja(); pintar(); toast('Borrado');
+  },
   // trabajos
   verTrabajo(el) { verTrabajo(D.trabajos.find(t => t.id === el.dataset.id)); },
   editarTrabajo(el) { formTrabajo(D.trabajos.find(t => t.id === el.dataset.id)); },
@@ -1125,8 +1161,8 @@ function tablas() {
     Trabajos: T(['id', 'Fecha', 'Cliente', 'Nombre cliente', 'Descripción', 'Servicios', 'Total', 'Moneda', 'Cobrado', 'Saldo', 'Facturado', 'N.º factura', 'Medio', 'Nota'],
       D.trabajos.map(t => { const x = totalesTrabajo(t); return [t.id, t.fecha, t.cliente, clienteNombre(t.cliente), t.descripcion, t.servicios.join(', '), t.total, t.moneda, x.cobrado, x.saldo, t.facturado ? 'Sí' : 'No', t.factura, t.medio, t.nota]; })),
     Cobros: T(['id trabajo', 'Cliente', 'Trabajo', 'Concepto', 'Monto', 'Moneda', 'Estado', 'Vence', 'Fecha de cobro', 'Medio', 'MEP del día', 'Monto en $'], cobros),
-    Gastos: T(['id', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Moneda', 'Medio', 'Estado', 'Vence', 'Fecha de pago', 'MEP del día', 'Monto en $', 'Fijo', 'Nota'],
-      D.gastos.map(g => [g.id, g.fecha, g.descripcion, g.categoria, g.monto, g.moneda, g.medio, g.pagado ? 'Pagado' : 'Por pagar', g.vence, g.fechaPago, g.mep || '', Math.round(aARS(g.monto, g.moneda, g.mep)), g.fijoId ? 'Sí' : 'No', g.nota])),
+    Gastos: T(['id', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Moneda', 'Medio', 'Estado', 'Vence', 'Fecha de pago', 'MEP del día', 'Monto en $', 'Fijo', 'Cuota', 'Nota'],
+      D.gastos.map(g => [g.id, g.fecha, g.descripcion, g.categoria, g.monto, g.moneda, g.medio, g.pagado ? 'Pagado' : 'Por pagar', g.vence, g.fechaPago, g.mep || '', Math.round(aARS(g.monto, g.moneda, g.mep)), g.fijoId ? 'Sí' : 'No', g.cuotas > 1 ? `${g.cuotaN}/${g.cuotas}` : '', g.nota])),
     Equipo: T(['id', 'Categoría', 'Ítem', 'Valor US$', 'Valor $ (MEP hoy)', 'Fecha de compra', 'N.º de serie', 'Nota'],
       D.equipo.map(e => [e.id, e.categoria, e.item, e.usd, Math.round(e.usd * mep()), e.fechaCompra, e.serie, e.nota])),
     'Gastos fijos': T(['id', 'Nombre', 'Categoría', 'Monto', 'Moneda', 'Día', 'Medio', 'Activo'],
