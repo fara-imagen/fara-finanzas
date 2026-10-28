@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -93,7 +93,7 @@ function cobrosDelMes(ym) {
   return out;
 }
 function gastosPagadosDelMes(ym) {
-  return D.gastos.filter(g => g.pagado && mesDe(g.fechaPago || g.fecha) === ym)
+  return D.gastos.filter(g => g.pagado && !g.retiro && mesDe(g.fechaPago || g.fecha) === ym)
     .map(g => ({ g, ars: aARS(g.monto, g.moneda, g.mep) }));
 }
 function pendientesCobro() {
@@ -255,6 +255,7 @@ const ICO = {
   movs: '<svg viewBox="0 0 24 24"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>',
   ahorro: '<svg viewBox="0 0 24 24"><path d="M12 3v3M7 9h10a3 3 0 013 3v5a3 3 0 01-3 3H7a3 3 0 01-3-3v-5a3 3 0 013-3zM12 12v5M9.5 14.5h5"/></svg>',
   ingreso: '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  reservas: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v2H4zM6 10v7M10 10v7M14 10v7M18 10v7M3 20h18"/></svg>',
   cuotas: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h3"/></svg>'
 };
 
@@ -287,14 +288,10 @@ function vistaMes() {
     </section>`;
   }
 
-  let compras = '';
-  if (A().comprasActivo && D.compras.length) {
-    const total = D.compras.reduce((s, c) => s + aARS(planCompra(c).porMes, c.moneda), 0);
-    compras = `<button class="item" data-a="ir" data-v="equipo">
-      <span class="codigo codigo--gasto">${ICO.compra}</span>
-      <span class="item__cuerpo"><span class="item__titulo">Próximas compras</span><span class="micro">Separá esto por mes para llegar a tiempo</span></span>
-      <span class="item__monto num">${plata(total)}</span></button>`;
-  }
+  const compras = `<button class="item" data-a="ir" data-v="reservas">
+      <span class="codigo codigo--gasto">${ICO.reservas}</span>
+      <span class="item__cuerpo"><span class="item__titulo">Reservas</span><span class="micro">Plata apartada para equipo, impuestos y compras</span></span>
+      <span class="item__monto num">${plata(totalReservado())}</span></button>`;
 
   return `
   <div class="mesbar">
@@ -312,6 +309,8 @@ function vistaMes() {
       <div class="pila"><span class="micro">Entró</span><span class="subtitulo num">${plata(entro)}</span></div>
       <div class="pila"><span class="micro">Salió</span><span class="subtitulo num">${plata(salio)}</span></div>
     </div>
+    <div class="fila" style="margin-top:12px"><span class="micro">${retirosDelMes(ym) ? `Te pagaste ${plata(retirosDelMes(ym))} este mes.` : 'Todavía no te pagaste este mes.'}</span>
+      <button class="btn btn--primario btn--chico" data-a="retiro" style="flex:none;white-space:nowrap">Pagarme a mí</button></div>
   </section>
 
   <div class="grilla2">
@@ -450,6 +449,10 @@ function vistaGastos() {
 }
 function itemGasto(g) {
   const atr = !g.pagado && g.vence && g.vence < hoyISO();
+  if (g.retiro) return `<button class="item" data-a="editarGasto" data-id="${g.id}">
+    <span class="codigo">${ICO.ingreso}</span>
+    <span class="item__cuerpo"><span class="item__titulo">Pago a mí</span><span class="micro">Pasó a Personal · ${h(g.medio || '')}</span></span>
+    <span class="item__monto num">${plata(g.monto, g.moneda)}</span></button>`;
   const est = g.pagado ? `<span class="micro">${g.cuotas > 1 ? `Cuota ${g.cuotaN}/${g.cuotas} · ` : ''}${h(g.medio || '')}</span>`
     : `<span class="estado ${atr ? 'estado--mal' : 'estado--pend'}">${atr ? 'Vencido' : 'Por pagar'}${g.vence ? ' · ' + fechaCorta(g.vence) : ''}</span>`;
   return `<button class="item" data-a="editarGasto" data-id="${g.id}">
@@ -467,19 +470,6 @@ function vistaEquipo() {
   for (const cat of D.listas.equipo) grupos.set(cat, []);
   for (const e of D.equipo) { if (!grupos.has(e.categoria)) grupos.set(e.categoria, []); grupos.get(e.categoria).push(e); }
 
-  let compras = '';
-  if (A().comprasActivo) {
-    compras = `<div class="fila" style="margin-top:18px"><h2 class="subtitulo">Próximas compras</h2><button class="btn btn--suave btn--chico" data-a="nuevaCompra">+ Agregar</button></div>
-    <div class="lista">${D.compras.length ? D.compras.map(c => {
-      const p = planCompra(c); const pct = c.precio ? Math.min(100, (c.ahorrado || 0) / c.precio * 100) : 0;
-      return `<button class="item" data-a="verCompra" data-id="${c.id}" style="flex-direction:column;align-items:stretch">
-        <span class="fila"><span class="item__titulo">${h(c.item)}</span><span class="num chico">${c.precio ? plata(c.precio, c.moneda) : '<span class="estado estado--pend">Poné el precio</span>'}</span></span>
-        <span class="barra"><i style="width:${pct}%"></i></span>
-        <span class="fila micro"><span>Ahorrado ${plata(c.ahorrado || 0, c.moneda)}</span><span>${c.precio ? `${plata(p.porMes, c.moneda)} por mes · ${p.restantes} mes${p.restantes > 1 ? 'es' : ''}` : ''}</span></span>
-      </button>`;
-    }).join('') : '<p class="micro">Nada planeado.</p>'}</div>`;
-  }
-
   return `
   <h1 class="titulo">Equipo</h1>
   <section class="bloque bloque--oscuro">
@@ -488,7 +478,6 @@ function vistaEquipo() {
     <p class="micro num">US$ ${fmtUSD.format(Math.round(totUSD))} · ${D.equipo.length} ítems · MEP ${plata(mep())}</p>
     ${Math.round(hoyUSD) < Math.round(totUSD) ? `<p class="micro num" style="margin-top:6px">Valor estimado hoy, con desgaste: ${plata(hoyUSD * mep())}</p>` : ''}
   </section>
-  ${compras}
   <div class="fila" style="margin-top:18px"><h2 class="subtitulo">Inventario</h2><button class="btn btn--suave btn--chico" data-a="nuevoEquipo">+ Agregar</button></div>
   ${[...grupos.entries()].filter(([, es]) => es.length).map(([cat, es]) => `
     <p class="etiqueta grupo">${h(cat)} · ${plata(es.reduce((s, e) => s + e.usd, 0) * mep())}</p>
@@ -601,7 +590,7 @@ function pintar() {
   if (!mapa[UI.tab]) UI.tab = 'mes';
   pintarNav();
   $('#vista').innerHTML = mapa[UI.tab]();
-  $('#fab').hidden = ['ajustes', 'analisis', 'ahorro'].includes(UI.tab);
+  $('#fab').hidden = ['ajustes', 'analisis', 'ahorro', 'reservas'].includes(UI.tab);
   pintarEstado();
 }
 function pintarEstado() {
@@ -1170,6 +1159,7 @@ function tablas() {
     Compras: T(['id', 'Ítem', 'Precio', 'Moneda', 'Meses', 'Ahorrado', 'Por mes'],
       D.compras.map(c => [c.id, c.item, c.precio, c.moneda, c.meses, c.ahorrado, Math.round(planCompra(c).porMes * 100) / 100])),
     Clientes: T(['Código', 'Nombre'], D.clientes.map(c => [c.codigo, c.nombre])),
+    Reservas: T(['Tipo', 'Fecha', 'Monto', 'Movimiento', 'Nota'], (D.reservas ? D.reservas.movs : []).map(m => [TIPOS_RES[m.tipo].nombre, m.fecha, m.monto, m.monto < 0 ? 'Usado' : 'Apartado', m.nota])),
     'P · Movimientos': T(['id', 'Tipo', 'Fecha', 'Descripción', 'Categoría', 'Va a', 'Monto', 'Moneda', 'Compartido', 'Tu parte %', 'Tu parte $', 'Medio', 'Estado', 'Vence', 'Cuota', 'Fijo', 'Nota'],
       D.personal.movs.map(m => [m.id, m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', fechaMov(m), m.descripcion, m.categoria, destinoTexto(m), m.monto, m.moneda, m.compartido ? 'Sí' : 'No', m.compartido ? m.parte : 100,
         Math.round(miARS(m, m.mep || mep())), m.medio, m.pagado ? (m.tipo === 'ingreso' ? 'Cobrado' : 'Pagado') : (m.tipo === 'ingreso' ? 'Por cobrar' : 'Por pagar'), m.vence, m.cuotas > 1 ? `${m.cuotaN}/${m.cuotas}` : '', m.fijoId ? 'Sí' : 'No', m.nota])),

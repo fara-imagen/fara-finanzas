@@ -636,5 +636,3 @@ function pintarNav() {
   const tc = $('meta[name="theme-color"]:not([media*="dark"])'); if (tc) tc.content = modo === 'personal' ? '#E7EBE5' : '#F2EBDD';
   const tcd = $('meta[name="theme-color"][media*="dark"]'); if (tcd) tcd.content = modo === 'personal' ? '#0F1D1F' : '#1A1410';
 }
-
-arrancar();
