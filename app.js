@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.3.2';
+const VERSION = '1.3.3';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);

@@ -302,12 +302,10 @@ body[data-modo="personal"] .barra{background:#D3DAD2}
   .nav button{flex-direction:row;justify-content:flex-start;gap:12px;padding:11px 14px;font-size:15px}
   .fab{right:max(32px,calc(50% - 528px));bottom:32px}
   .toast{bottom:32px}
-  .vista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;align-items:start}
-  .vista > *{grid-column:1 / -1}
-  .vista > .bloque:not(.bloque--oscuro), .vista > details.bloque{grid-column:auto}
-  .lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app{max-width:1080px}
+  .vista{max-width:820px}
+  .lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
   .bloque .lista{grid-template-columns:1fr}
-  .vista > .grilla2{grid-column:1 / -1}
   .titulo{font-size:34px}
   .hoja{top:50%;bottom:auto;transform:translate(-50%,-50%);border-radius:28px;max-height:88vh;width:min(600px,calc(100% - 64px));animation:modal .25s var(--mov-salida)}
   .hoja::before{display:none}
