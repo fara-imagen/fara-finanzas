@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -149,6 +149,32 @@ function generarFijos() {
     cambio = true;
   }
   if (cambio) guardar();
+}
+
+/* ================= tema claro / oscuro ================= */
+const TEMA_LS = 'fara-finanzas-tema';
+const temaGuardado = () => { try { return localStorage.getItem(TEMA_LS) || 'auto'; } catch (e) { return 'auto'; } };
+const mqOscuro = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+const esOscuro = () => { const t = temaGuardado(); return t === 'oscuro' || (t === 'auto' && !!(mqOscuro && mqOscuro.matches)); };
+function aplicarTema() {
+  const osc = esOscuro();
+  document.documentElement.classList.toggle('oscuro', osc);
+  const personal = document.body && document.body.dataset.modo === 'personal';
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.content = osc ? (personal ? '#0D1718' : '#1A1410') : (personal ? '#E7EBE5' : '#F2EBDD');
+}
+function elegirTema(t) { try { localStorage.setItem(TEMA_LS, t); } catch (e) { } aplicarTema(); pintar(); }
+if (mqOscuro && mqOscuro.addEventListener) mqOscuro.addEventListener('change', () => { if (temaGuardado() === 'auto') { aplicarTema(); pintar(); } });
+const ICO_SOL = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const ICO_LUNA = '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>';
+function bloqueTema() {
+  const t = temaGuardado();
+  return `<section class="bloque"><h2 class="subtitulo">Apariencia</h2>
+    <div class="segmento segmento--3" style="margin-top:12px">
+      <button class="${t === 'auto' ? 'is-on' : ''}" data-a="tema" data-v="auto">Automático</button>
+      <button class="${t === 'claro' ? 'is-on' : ''}" data-a="tema" data-v="claro">Claro</button>
+      <button class="${t === 'oscuro' ? 'is-on' : ''}" data-a="tema" data-v="oscuro">Oscuro</button></div>
+    <p class="micro" style="margin-top:6px">Automático sigue la configuración del teléfono. También podés cambiarlo con el botón de arriba.</p></section>`;
 }
 
 /* ================= estado de la vista ================= */
@@ -505,6 +531,8 @@ function vistaAjustes() {
   return `
   <h1 class="titulo">Ajustes</h1>
 
+  ${bloqueTema()}
+
   <section class="bloque">
     <h2 class="subtitulo">Respaldo en Google Sheets</h2>
     <p class="micro" style="margin:4px 0 0">${a.sheetUrl ? (a.ultimoRespaldo ? `Último respaldo: ${new Date(a.ultimoRespaldo).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}.` : 'Conectado, todavía sin respaldar.') + (a.pendiente ? ' Hay cambios sin subir.' : '') : 'Sin conectar. Seguí la guía del archivo GUIA-SHEETS para crear tu enlace.'}</p>
@@ -600,7 +628,7 @@ function pintarEstado() {
   if (!a.sheetUrl) resp = '<span class="pastilla is-off"><i></i>Sin respaldo</span>';
   else if (a.pendiente) resp = `<span class="pastilla is-pend"><i></i>${navigator.onLine ? 'Subiendo…' : 'Sin conexión'}</span>`;
   else resp = '<span class="pastilla"><i></i>Respaldado</span>';
-  $('#estado').innerHTML = `<span class="pastilla num">MEP ${plata(mep())}</span>${resp}`;
+  $('#estado').innerHTML = `<span class="pastilla num">MEP ${plata(mep())}</span>${resp}<button class="tema" data-a="temaRapido" aria-label="${esOscuro() ? 'Pasar a modo claro' : 'Pasar a modo oscuro'}">${esOscuro() ? ICO_SOL : ICO_LUNA}</button>`;
 }
 
 /* ================= hoja (modal) ================= */
@@ -1028,6 +1056,8 @@ const ACC = {
     l.splice(+el.dataset.i, 1); guardar(); pintar(); abrirDetalle(el.dataset.lista);
   },
   actualizarMep() { actualizarMep(true); },
+  tema(el) { elegirTema(el.dataset.v); },
+  temaRapido() { elegirTema(esOscuro() ? 'claro' : 'oscuro'); },
   async actualizarApp() {
     if (!navigator.onLine) return toast('Necesitás internet para actualizar');
     toast('Buscando la última versión…');

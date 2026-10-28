@@ -5,8 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>FÁRA Finanzas</title>
 <meta name="description" content="Registro de trabajos, gastos y equipo de FÁRA.">
-<meta name="theme-color" content="#F2EBDD" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1A1410" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2EBDD">
+<script>
+/* aplica el tema antes de dibujar, así no parpadea */
+(function () {
+  var t = 'auto'; try { t = localStorage.getItem('fara-finanzas-tema') || 'auto'; } catch (e) {}
+  var osc = t === 'oscuro' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  if (osc) document.documentElement.classList.add('oscuro');
+})();
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/simbolo-alt.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -23,7 +30,7 @@
 <div class="app">
   <header class="top">
     <div class="top__marca">
-      <picture class="solo-fara"><source srcset="icons/logo-negativo.svg" media="(prefers-color-scheme: dark)"><img class="top__logo" src="icons/logo.svg" alt="FÁRA"></picture>
+      <span class="solo-fara"><img class="top__logo logo-claro" src="icons/logo.svg" alt="FÁRA"><img class="top__logo logo-oscuro" src="icons/logo-negativo.svg" alt="FÁRA"></span>
       <span class="solo-personal top__personal">Personal</span>
     </div>
     <div class="top__estado" id="estado"></div>

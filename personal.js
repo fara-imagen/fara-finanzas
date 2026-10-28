@@ -340,6 +340,8 @@ function pVistaAjustes() {
   ${editor('ingreso', 'Categorías de ingreso', 'De dónde entra la plata.')}
   ${editor('medio', 'Medios de pago', 'Cuentas, billeteras y tarjetas.')}
 
+  ${bloqueTema()}
+
   <section class="bloque">
     <h2 class="subtitulo">Respaldo y dólar</h2>
     <p class="micro" style="margin:4px 0 10px">Son los mismos que FÁRA: un solo Sheet guarda las dos partes, cada una en sus pestañas. ${a.sheetUrl ? (a.pendiente ? 'Hay cambios sin subir.' : 'Todo respaldado.') : 'Todavía sin conectar.'}</p>
@@ -633,6 +635,5 @@ function pintarNav() {
   }
   $$('#modo button').forEach(b => b.classList.toggle('is-on', b.dataset.v === modo));
   document.body.dataset.modo = modo;
-  const tc = $('meta[name="theme-color"]:not([media*="dark"])'); if (tc) tc.content = modo === 'personal' ? '#E7EBE5' : '#F2EBDD';
-  const tcd = $('meta[name="theme-color"][media*="dark"]'); if (tcd) tcd.content = modo === 'personal' ? '#0F1D1F' : '#1A1410';
+  aplicarTema();
 }
