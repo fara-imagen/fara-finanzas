@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.2.2';
+const VERSION = '1.3.0';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -136,6 +136,7 @@ function planCompra(c) {
 
 /* Gastos fijos: se cargan solos como "por pagar" el mes en curso */
 function generarFijos() {
+  if (typeof pGenerarFijos === 'function') pGenerarFijos();
   const ym = mesActual(); let cambio = false;
   for (const f of D.fijos) {
     if (!f.activo || (f.desde && f.desde > ym)) continue;
@@ -151,7 +152,7 @@ function generarFijos() {
 }
 
 /* ================= estado de la vista ================= */
-const UI = { tab: 'mes', mes: mesActual(), filtroT: 'todos', filtroG: 'mes', per: '6', anio: new Date().getFullYear(), sel: null };
+const UI = { modo: (() => { try { return localStorage.getItem('fara-finanzas-modo') === 'personal' ? 'personal' : 'fara'; } catch (e) { return 'fara'; } })(), tab: 'mes', mes: mesActual(), filtroT: 'todos', filtroG: 'mes', per: '6', anio: new Date().getFullYear(), sel: null };
 
 /* ================= gráficos ================= */
 const fmtCorto = (n) => {
@@ -247,7 +248,14 @@ const ICO = {
   trabajo: '<svg viewBox="0 0 24 24"><path d="M4 8h16v11H4zM9 8V5h6v3M4 13h16"/></svg>',
   equipo: '<svg viewBox="0 0 24 24"><path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   compra: '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6zM9 8a3 3 0 016 0"/></svg>',
-  fijo: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5l2 2M20 12a8 8 0 01-14 5l-2-2M20 4v5h-5M4 20v-5h5"/></svg>'
+  fijo: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5l2 2M20 12a8 8 0 01-14 5l-2-2M20 4v5h-5M4 20v-5h5"/></svg>',
+  mes: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  analisis: '<svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg>',
+  ajustes: '<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
+  movs: '<svg viewBox="0 0 24 24"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>',
+  ahorro: '<svg viewBox="0 0 24 24"><path d="M12 3v3M7 9h10a3 3 0 013 3v5a3 3 0 01-3 3H7a3 3 0 01-3-3v-5a3 3 0 013-3zM12 12v5M9.5 14.5h5"/></svg>',
+  ingreso: '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  cuotas: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h3"/></svg>'
 };
 
 /* ================= vista: MES ================= */
@@ -339,7 +347,7 @@ function vistaMes() {
   ${compras}
   ${mono}
   <button class="item" data-a="ir" data-v="analisis" style="margin-top:12px">
-    <span class="codigo codigo--gasto"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span>
+    <span class="codigo codigo--gasto">${ICO.analisis}</span>
     <span class="item__cuerpo"><span class="item__titulo">Ver gráficos y análisis</span><span class="micro">Evolución, servicios, clientes y categorías</span></span></button>`;
 }
 
@@ -575,10 +583,11 @@ function vacio(t, s) {
 
 /* ================= pintar ================= */
 function pintar() {
-  const v = { mes: vistaMes, analisis: vistaAnalisis, trabajos: vistaTrabajos, gastos: vistaGastos, equipo: vistaEquipo, ajustes: vistaAjustes }[UI.tab];
-  $('#vista').innerHTML = v();
-  $$('#nav button').forEach(b => b.classList.toggle('is-on', b.dataset.tab === UI.tab));
-  $('#fab').hidden = UI.tab === 'ajustes' || UI.tab === 'analisis';
+  const mapa = VISTAS[UI.modo];
+  if (!mapa[UI.tab]) UI.tab = 'mes';
+  pintarNav();
+  $('#vista').innerHTML = mapa[UI.tab]();
+  $('#fab').hidden = ['ajustes', 'analisis', 'ahorro'].includes(UI.tab);
   pintarEstado();
 }
 function pintarEstado() {
@@ -1002,7 +1011,7 @@ const ACC = {
     if (!confirm('Esto borra todos los datos de este teléfono. El Sheet de respaldo no se toca. ¿Seguro?')) return;
     if (!confirm('Última confirmación: ¿borrar todo?')) return;
     const keep = { sheetUrl: A().sheetUrl, sheetClave: A().sheetClave };
-    D = datosIniciales(); Object.assign(D.ajustes, keep); D.ajustes.pendiente = false;
+    D = asegurarPersonal(datosIniciales()); Object.assign(D.ajustes, keep); D.ajustes.pendiente = false;
     guardar({ respaldo: false }); pintar(); toast('Listo, empezás de cero');
   }
 };
@@ -1055,6 +1064,7 @@ function renombrar(lista, i, nuevo) {
 }
 
 function menuNuevo() {
+  if (UI.modo === 'personal') return pFormMov();
   if (UI.tab === 'gastos') return formGasto();
   if (UI.tab === 'trabajos') return formTrabajo();
   if (UI.tab === 'equipo') return formEquipo();
@@ -1077,7 +1087,7 @@ function importar(file) {
     try {
       const d = JSON.parse(r.result); if (d.v !== 1 || !d.ajustes) throw 0;
       if (!confirm('Esto reemplaza los datos de este teléfono por los de la copia. ¿Seguir?')) return;
-      D = d; guardar(); pintar(); toast('Copia cargada');
+      D = asegurarPersonal(d); guardar(); pintar(); toast('Copia cargada');
     } catch (e) { toast('Ese archivo no es una copia de FÁRA Finanzas'); }
   };
   r.readAsText(file);
@@ -1112,7 +1122,16 @@ function tablas() {
       D.fijos.map(f => [f.id, f.descripcion, f.categoria, f.monto, f.moneda, f.dia, f.medio, f.activo ? 'Sí' : 'No'])),
     Compras: T(['id', 'Ítem', 'Precio', 'Moneda', 'Meses', 'Ahorrado', 'Por mes'],
       D.compras.map(c => [c.id, c.item, c.precio, c.moneda, c.meses, c.ahorrado, Math.round(planCompra(c).porMes * 100) / 100])),
-    Clientes: T(['Código', 'Nombre'], D.clientes.map(c => [c.codigo, c.nombre]))
+    Clientes: T(['Código', 'Nombre'], D.clientes.map(c => [c.codigo, c.nombre])),
+    'P · Movimientos': T(['id', 'Tipo', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Moneda', 'Compartido', 'Tu parte %', 'Tu parte $', 'Medio', 'Estado', 'Vence', 'Cuota', 'Fijo', 'Nota'],
+      D.personal.movs.map(m => [m.id, m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', fechaMov(m), m.descripcion, m.categoria, m.monto, m.moneda, m.compartido ? 'Sí' : 'No', m.compartido ? m.parte : 100,
+        Math.round(miARS(m, m.mep || mep())), m.medio, m.pagado ? (m.tipo === 'ingreso' ? 'Cobrado' : 'Pagado') : (m.tipo === 'ingreso' ? 'Por cobrar' : 'Por pagar'), m.vence, m.cuotas > 1 ? `${m.cuotaN}/${m.cuotas}` : '', m.fijoId ? 'Sí' : 'No', m.nota])),
+    'P · Fijos': T(['id', 'Tipo', 'Nombre', 'Categoría', 'Monto', 'Moneda', 'Día', 'Medio', 'Compartido', 'Tu parte %', 'Activo'],
+      D.personal.fijos.map(f => [f.id, f.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', f.descripcion, f.categoria, f.monto, f.moneda, f.dia, f.medio, f.compartido ? 'Sí' : 'No', f.compartido ? f.parte : 100, f.activo ? 'Sí' : 'No'])),
+    'P · Ahorro': T(['Meta', 'Objetivo', 'Moneda', 'Ahorrado', 'Para cuándo', 'Fondo'],
+      D.personal.metas.map(m => [m.nombre, m.objetivo, m.moneda, pAhorrado(m), m.fecha, (D.personal.fondos.find(f => f.id === m.fondo) || {}).nombre || ''])),
+    'P · Aportes': T(['Meta', 'Fecha', 'Monto', 'Moneda'],
+      D.personal.metas.flatMap(m => (m.aportes || []).map(ap => [m.nombre, ap.fecha, ap.monto, m.moneda])))
   };
 }
 let timerResp, respaldando = false, conectando = false;
@@ -1144,7 +1163,7 @@ async function restaurar(sinPreguntar = false) {
     if (!j.ok || !j.respaldo) throw new Error(j.error || 'vacío');
     const d = JSON.parse(j.respaldo);
     d.ajustes.sheetUrl = a.sheetUrl; d.ajustes.sheetClave = a.sheetClave; d.ajustes.pendiente = false;
-    D = d; guardar({ respaldo: false }); pintar(); toast('Datos recuperados');
+    D = asegurarPersonal(d); guardar({ respaldo: false }); pintar(); toast('Datos recuperados');
   } catch (e) { toast('No encontré un respaldo en el Sheet'); }
 }
 
@@ -1182,9 +1201,11 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 
-generarFijos();
-guardar({ respaldo: !!A().pendiente });
-pintar();
-const horasMep = A().mepFecha ? (Date.now() - new Date(A().mepFecha)) / 36e5 : 99;
-if (horasMep > 3) actualizarMep();
-if (A().pendiente) respaldar(false);
+function arrancar() {
+  generarFijos();
+  guardar({ respaldo: !!A().pendiente });
+  pintar();
+  const horasMep = A().mepFecha ? (Date.now() - new Date(A().mepFecha)) / 36e5 : 99;
+  if (horasMep > 3) actualizarMep();
+  if (A().pendiente) respaldar(false);
+}
