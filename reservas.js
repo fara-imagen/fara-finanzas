@@ -18,17 +18,7 @@ function asegurarReservas(d) {
 }
 asegurarReservas(D);
 
-/* lo que pone tu sueldo contra lo que genera FÁRA */
-function bloqueSostiene(ym) {
-  const puso = aportesDelMes(ym), gen = gananciaMes(ym);
-  if (!puso && !R().aportes.length) return '';
-  const max = Math.max(puso, Math.max(0, gen), 1);
-  return `<section class="bloque"><p class="etiqueta">¿FÁRA ya se sostiene?</p>
-    <div class="cat" style="margin-top:12px"><div class="fila chico"><span>Tu sueldo puso</span><span class="num">${plata(puso)}</span></div><div class="barra barra--gasto"><i style="width:${puso / max * 100}%"></i></div></div>
-    <div class="cat"><div class="fila chico"><span>El negocio generó</span><span class="num ${gen < 0 ? 'mal' : ''}">${plata(gen)}</span></div><div class="barra"><i style="width:${Math.max(0, gen) / max * 100}%"></i></div></div>
-    <p class="micro" style="margin-top:6px">${gen >= puso && gen > 0 ? 'Este mes el negocio generó más de lo que pusiste.' : 'Cuando la barra de abajo supere a la de arriba, FÁRA se sostiene sola.'} Desde que empezaste pusiste ${plata(aportesTotal())}.</p>
-  </section>`;
-}
+
 const R = () => D.reservas;
 const TIPOS_RES = {
   renuncia: { nombre: 'Fondo de renuncia', corto: 'Renuncia' },
@@ -49,7 +39,7 @@ const gananciaMes = (ym) => cobrosDelMes(ym).reduce((s, x) => s + x.ars, 0) - ga
    promedio de los últimos 3 meses cerrados; si no hay datos, tus fijos personales */
 function gastoPersonalMensual() {
   const ms = [1, 2, 3].map(i => sumarMes(mesActual(), -i));
-  const tot = ms.map(m => pDelMes(m, 'gasto').filter(x => !x.m.meta && !x.m.fondo && !x.m.aporte).reduce((s, x) => s + x.ars, 0));
+  const tot = ms.map(m => pDelMes(m, 'gasto').filter(x => !x.m.meta && !x.m.fondo && x.m.categoria !== 'FÁRA').reduce((s, x) => s + x.ars, 0));
   const conDatos = tot.filter(v => v > 0);
   if (conDatos.length) return conDatos.reduce((s, v) => s + v, 0) / conDatos.length;
   return P().fijos.filter(f => f.activo && f.tipo === 'gasto').reduce((s, f) => s + aARS(f.monto * parteDe(f), f.moneda), 0);
@@ -61,6 +51,28 @@ function totalReservado() {
   for (const k of Object.keys(TIPOS_RES)) if (R()[k].activo) t += saldoRes(k);
   if (A().comprasActivo) t += D.compras.reduce((s, c) => s + aARS(c.ahorrado || 0, c.moneda), 0);
   return t;
+}
+
+/* ================= FÁRA pagado con plata personal ================= */
+function sincPersonal(g) {
+  if (!g) return;
+  const debe = g.medio === 'Personal' && g.pagado;
+  const m = P().movs.find(x => x.deFara === g.id);
+  if (!debe) { if (m) P().movs = P().movs.filter(x => x !== m); return; }
+  const f = g.fechaPago || g.fecha;
+  const datos = { monto: g.monto, moneda: g.moneda, fecha: f, fechaPago: f, pagado: true, vence: '', mep: g.mep || mep(), categoria: 'FÁRA',
+    descripcion: g.descripcion || g.categoria, nota: g.cuotas > 1 ? `Cuota ${g.cuotaN} de ${g.cuotas}` : '' };
+  if (m) Object.assign(m, datos);
+  else P().movs.push({ id: uid(), deFara: g.id, tipo: 'gasto', cuotas: 1, medio: P().medioGasto || P().listas.medio[0], compartido: false, meta: '', fondo: '', ...datos });
+}
+function formMedioPersonal(m) {
+  abrirHoja(h(m.descripcion || 'Gasto de FÁRA'), `
+  <form data-form="medioPersonal" data-id="${m.id}">
+    <p class="chico" style="margin:0"><strong class="num">${plata(m.monto, m.moneda)}</strong> · ${fechaCorta(m.fechaPago || m.fecha)}</p>
+    <p class="ayuda" style="margin-top:6px">Viene de FÁRA. El monto y la fecha se cambian allá; acá elegís con qué lo pagaste.</p>
+    <div class="campo"><span>Medio de pago</span>${chips('medio', P().listas.medio, m.medio)}</div>
+    <div class="acciones"><button type="button" class="btn btn--suave" data-a="irAFara" data-id="${m.deFara || ''}">Ver en FÁRA</button><button class="btn btn--primario">Guardar</button></div>
+  </form>`);
 }
 
 /* ================= vista ================= */
@@ -82,10 +94,8 @@ function vistaReservas() {
   <section class="bloque bloque--oscuro">
     <p class="etiqueta">Total reservado</p>
     <p class="grande num" style="margin:10px 0 2px">${plata(totalReservado())}</p>
-    <p class="micro">${retirosDelMes(ym) ? `Este mes te pagaste ${plata(retirosDelMes(ym))}.` : 'Este mes todavía no te pagaste.'}</p>
   </section>
-  <div class="grilla2" style="margin:4px 0 6px"><button class="btn btn--secundario" data-a="aporte">Poner plata</button><button class="btn btn--primario" data-a="retiro">Pagarme a mí</button></div>
-  <p class="micro" style="margin:0 0 8px;text-align:center">Los dos se cargan en FÁRA y en Personal a la vez.</p>`;
+`;
 
   if (R().renuncia.activo) {
     const obj = objetivoRenuncia(), s = saldoRes('renuncia'), gm = gastoPersonalMensual();
@@ -130,12 +140,6 @@ function vistaReservas() {
     }).join('') : '<p class="micro">Nada planeado.</p>'}</div>`;
   }
 
-  if (R().aportes.length) html += `<section class="bloque"><p class="etiqueta">Plata que pusiste en FÁRA</p>
-    <p class="chico" style="margin:8px 0 4px">En total: <strong class="num">${plata(aportesTotal())}</strong></p>
-    <div class="lista">${[...R().aportes].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 6).map(a => `
-      <button class="item item--plano" data-a="aporteEditar" data-id="${a.id}"><span class="item__cuerpo"><span class="item__titulo">${h(a.nota || 'Aporte de tu sueldo')}</span><span class="micro">${fechaCorta(a.fecha)} · ${h(a.medio || '')}</span></span>
-      <span class="item__monto num">${plata(a.monto, a.moneda)}</span></button>`).join('')}</div></section>`;
-
   const ult = [...R().movs].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 10);
   if (ult.length) html += `<section class="bloque"><p class="etiqueta">Últimos movimientos</p><div class="lista">${ult.map(m => `
     <div class="item item--plano"><span class="item__cuerpo"><span class="item__titulo">${m.monto < 0 ? 'Usado' : 'Apartado'} · ${TIPOS_RES[m.tipo].corto}</span><span class="micro">${fechaCorta(m.fecha)}${m.nota ? ' · ' + h(m.nota) : ''}</span></span>
@@ -160,11 +164,13 @@ function vistaReservas() {
 function formReserva(tipo, signo) {
   const usar = signo < 0;
   const sug = tipo === 'reposicion' ? sugeridoRepos() - apartadoMes(mesActual(), 'reposicion') : tipo === 'impuestos' ? sugeridoImp(mesActual()) - apartadoMes(mesActual(), 'impuestos') : 0;
-  abrirHoja(`${usar ? 'Usar de' : 'Apartar en'} ${TIPOS_RES[tipo].corto}`, `
+  abrirHoja(`${usar ? 'Usar de' : 'Apartar en'} ${TIPOS_RES[tipo].nombre}`, `
   <form data-form="reserva" data-t="${tipo}" data-s="${signo}">
     <label class="campo"><span>Monto en pesos</span><input class="input" name="monto" inputmode="decimal" value="${!usar && sug > 0 ? montoInput(Math.round(sug)) : ''}" autofocus required style="font-size:24px;font-weight:600"></label>
     ${!usar && sug > 0 ? '<p class="ayuda">Te propongo lo que falta para este mes. Cambialo si querés.</p>' : ''}
     ${usar ? `<p class="ayuda">Tenés ${plata(saldoRes(tipo))} reservados acá.</p>` : ''}
+    ${usar ? '' : `<div class="campo"><span>¿De dónde sale la plata?</span>${chips('origen', ['Plata de FÁRA', 'Personal'], tipo === 'renuncia' ? 'Personal' : 'Plata de FÁRA')}</div>
+    <p class="ayuda" style="margin-top:-6px">Si elegís Personal, aparece también como gasto en Personal con categoría FÁRA.</p>`}
     <label class="campo"><span>Fecha</span><input class="input" type="date" name="fecha" value="${hoyISO()}"></label>
     <label class="campo"><span>Nota (opcional)</span><input class="input" name="nota" placeholder="${usar ? 'Ej.: Arreglo del flash' : ''}"></label>
     <div class="acciones"><button class="btn btn--primario">${usar ? 'Registrar uso' : 'Apartar'}</button></div>
@@ -199,6 +205,10 @@ function formAporte(a) {
 }
 
 Object.assign(FORMS, {
+  medioPersonal(form, d) {
+    const m = P().movs.find(x => x.id === form.dataset.id); m.medio = d.medio; P().medioGasto = d.medio;
+    guardar(); cerrarHoja(); toast('Medio actualizado'); pintar();
+  },
   aporte(form, d) {
     const monto = leerMonto(d.monto); if (!monto) return toast('Poné un monto');
     const id = form.dataset.id || uid();
@@ -214,7 +224,12 @@ Object.assign(FORMS, {
   },
   reserva(form, d) {
     const n = leerMonto(d.monto); if (!n) return toast('Poné un monto');
-    R().movs.push({ id: uid(), tipo: form.dataset.t, fecha: d.fecha || hoyISO(), monto: n * (+form.dataset.s), nota: d.nota.trim() });
+    const mov = { id: uid(), tipo: form.dataset.t, fecha: d.fecha || hoyISO(), monto: n * (+form.dataset.s), nota: d.nota.trim() };
+    R().movs.push(mov);
+    if (+form.dataset.s > 0 && d.origen === 'Personal') {
+      P().movs.push({ id: uid(), deRes: mov.id, tipo: 'gasto', cuotas: 1, monto: n, moneda: 'ARS', fecha: mov.fecha, fechaPago: mov.fecha, pagado: true, vence: '', mep: mep(),
+        medio: P().medioGasto || P().listas.medio[0], categoria: 'FÁRA', descripcion: TIPOS_RES[mov.tipo].nombre, compartido: false, meta: '', fondo: '', nota: mov.nota });
+    }
     guardar(); cerrarHoja(); toast(+form.dataset.s < 0 ? 'Uso registrado' : 'Apartado'); pintar();
   },
   resNum(form, d) { R()[form.dataset.k][form.dataset.c] = leerMonto(d.valor); guardar(); pintar(); toast('Guardado'); },
@@ -238,8 +253,16 @@ const _editarGasto = ACC.editarGasto, _pEditar = ACC.pEditar;
 Object.assign(ACC, {
   resApartar(el) { formReserva(el.dataset.v, 1); },
   resUsar(el) { formReserva(el.dataset.v, -1); },
-  resBorrar(el) { if (!confirm('¿Borrar este movimiento de reserva?')) return; R().movs = R().movs.filter(m => m.id !== el.dataset.id); guardar(); pintar(); },
+  resBorrar(el) {
+    const id = el.dataset.id, enP = P().movs.some(m => m.deRes === id);
+    if (!confirm('¿Borrar este movimiento de reserva?' + (enP ? ' También se borra de Personal.' : ''))) return;
+    R().movs = R().movs.filter(m => m.id !== id); P().movs = P().movs.filter(m => m.deRes !== id); guardar(); pintar();
+  },
   retiro() { formRetiro(); },
+  irAFara(el) {
+    cerrarHoja(); const g = D.gastos.find(x => x.id === el.dataset.id);
+    cambiarModo('fara', g ? 'gastos' : 'reservas'); if (g) formGasto(g);
+  },
   aporte() { formAporte(); },
   aporteEditar(el) { formAporte(R().aportes.find(a => a.id === el.dataset.id)); },
   aporteBorrar(el) {
@@ -258,6 +281,7 @@ Object.assign(ACC, {
     const m = P().movs.find(x => x.id === el.dataset.id);
     if (m && m.retiro) { const g = D.gastos.find(x => x.retiro === m.retiro); if (g) return formRetiro(g); }
     if (m && m.aporte) { const a = R().aportes.find(x => x.id === m.aporte); if (a) return formAporte(a); }
+    if (m && (m.deFara || m.deRes)) return formMedioPersonal(m);
     _pEditar(el);
   }
 });

@@ -1,5 +1,5 @@
 /* FÁRA Finanzas · service worker: guarda una copia de la app en el teléfono para que abra sin internet. */
-const VERSION = 'fara-finanzas-1.7.0';
+const VERSION = 'fara-finanzas-1.8.0';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'app.js', 'personal.js', 'reservas.js', 'manifest.webmanifest',
   'icons/logo.svg', 'icons/logo-negativo.svg', 'icons/simbolo.svg', 'icons/simbolo-alt.svg', 'icons/favicon-32.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'

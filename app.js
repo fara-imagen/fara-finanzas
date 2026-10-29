@@ -2,7 +2,7 @@
 'use strict';
 
 const CLAVE_LS = 'fara-finanzas-v1';
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 
 /* ================= utilidades ================= */
 const $ = (s, el = document) => el.querySelector(s);
@@ -335,7 +335,6 @@ function vistaMes() {
       <div class="pila"><span class="micro">Entró</span><span class="subtitulo num">${plata(entro)}</span></div>
       <div class="pila"><span class="micro">Salió</span><span class="subtitulo num">${plata(salio)}</span></div>
     </div>
-    <div class="grilla2" style="margin-top:14px"><button class="btn btn--chico btn--en-oscuro" data-a="aporte">Poner plata</button><button class="btn btn--primario btn--chico" data-a="retiro">Pagarme a mí</button></div>
   </section>
 
   <div class="grilla2">
@@ -348,8 +347,6 @@ function vistaMes() {
       ${atrP ? `<span class="estado estado--mal">${atrP} vencido${atrP > 1 ? 's' : ''}</span>` : `<span class="micro">${pp.length} pago${pp.length === 1 ? '' : 's'}</span>`}
     </button>
   </div>
-
-  ${bloqueSostiene(ym)}
 
   <section class="bloque">
     <p class="etiqueta">Punto de equilibrio</p>
@@ -664,6 +661,8 @@ const chips = (nombre, opciones, elegido, multi = false) => {
 const interruptor = (nombre, txt, on, sub = '') => `<label class="interruptor"><span><strong>${txt}</strong>${sub ? `<br><span class="micro">${sub}</span>` : ''}</span><input type="checkbox" name="${nombre}" ${on ? 'checked' : ''} data-a="interr"></label>`;
 
 /* ================= formularios: GASTO ================= */
+// En FÁRA, "Personal" es un medio más: significa que lo pagó tu plata personal.
+const mediosFara = () => ['Personal', ...D.listas.medio.filter(m => m !== 'Personal')];
 function formGasto(g) {
   const nuevo = !g;
   g = g || { fecha: hoyISO(), monto: 0, moneda: 'ARS', categoria: '', medio: A().medioGasto, pagado: true, vence: '', descripcion: '', nota: '' };
@@ -672,7 +671,8 @@ function formGasto(g) {
     ${campoMonto('monto', g.monto, g.moneda)}
     <label class="campo"><span>Qué fue</span><input class="input" name="descripcion" value="${h(g.descripcion)}" placeholder="Ej.: Fondo blanco infinito"></label>
     <div class="campo"><span>Categoría</span>${chips('categoria', D.listas.gasto, g.categoria || D.listas.gasto[0])}</div>
-    <div class="campo"><span>Medio de pago</span>${chips('medio', D.listas.medio, g.medio)}</div>
+    <div class="campo"><span>¿De dónde salió la plata?</span>${chips('medio', mediosFara(), g.medio)}</div>
+    <p class="ayuda" style="margin-top:-6px">Si elegís Personal, el gasto aparece también en Personal con categoría FÁRA.</p>
     ${nuevo ? `${interruptor('enCuotas', 'En cuotas', false, 'Se carga una cuota por mes')}
     <div data-si="enCuotas" hidden><div class="grilla2">
       <label class="campo"><span>Cantidad de cuotas</span><input class="input" name="cuotas" inputmode="numeric" value="3"></label>
@@ -697,6 +697,7 @@ function guardarGasto(form, datos) {
       const f = `${sumarMes(primera, i)}-${dia}`;
       D.gastos.push({ id: uid(), fecha: f, fechaPago: f, pagado: true, vence: '', monto: Math.round(total / n * 100) / 100, moneda: datos.moneda,
         descripcion: datos.descripcion.trim(), categoria: datos.categoria, medio: datos.medio, nota: datos.nota.trim(), mep: mep(), grupo, cuotas: n, cuotaN: i + 1 });
+      sincPersonal(D.gastos.at(-1));
     }
     if (datos.medio) A().medioGasto = datos.medio;
     guardar(); cerrarHoja(); toast(`${n} cuotas cargadas`); pintar(); return;
@@ -714,7 +715,8 @@ function guardarGasto(form, datos) {
   if (!base.monto) return toast('Poné un monto');
   if (!id) D.gastos.push(base);
   if (datos.medio) A().medioGasto = datos.medio;
-  guardar(); cerrarHoja(); toast(id ? 'Gasto actualizado' : 'Gasto cargado'); pintar();
+  sincPersonal(base);
+  guardar(); cerrarHoja(); toast(base.medio === 'Personal' && base.pagado ? 'Cargado en FÁRA y en Personal' : id ? 'Gasto actualizado' : 'Gasto cargado'); pintar();
 }
 
 /* ================= formularios: TRABAJO ================= */
@@ -877,7 +879,7 @@ function formFijo(f) {
     ${campoMonto('monto', f.monto, f.moneda)}
     <label class="campo"><span>Día del mes en que vence</span><input class="input" name="dia" inputmode="numeric" value="${f.dia}"></label>
     <div class="campo"><span>Categoría</span>${chips('categoria', D.listas.gasto, f.categoria)}</div>
-    <div class="campo"><span>Medio de pago</span>${chips('medio', D.listas.medio, f.medio)}</div>
+    <div class="campo"><span>¿De dónde sale la plata?</span>${chips('medio', mediosFara(), f.medio)}</div>
     ${interruptor('activo', 'Activo', f.activo, 'Pausalo si no lo pagás por un tiempo')}
     <div class="acciones">${nuevo ? '' : '<button type="button" class="btn btn--peligro" data-a="borrarFijo" data-id="' + f.id + '">Borrar</button>'}<button class="btn btn--primario">Guardar</button></div>
   </form>`);
@@ -992,8 +994,11 @@ const ACC = {
   editarGasto(el) { formGasto(D.gastos.find(g => g.id === el.dataset.id)); },
   borrarGasto(el) {
     const g = D.gastos.find(x => x.id === el.dataset.id);
-    if (g.grupo && g.cuotas > 1) { if (!confirm(`¿Borrar las ${g.cuotas} cuotas de "${g.descripcion || g.categoria}"?`)) return; D.gastos = D.gastos.filter(x => x.grupo !== g.grupo); }
-    else { if (!confirm('¿Borrar este gasto?')) return; D.gastos = D.gastos.filter(x => x !== g); }
+    const aBorrar = g.grupo && g.cuotas > 1 ? D.gastos.filter(x => x.grupo === g.grupo) : [g];
+    const enPersonal = aBorrar.some(x => P().movs.some(m => m.deFara === x.id));
+    if (!confirm((aBorrar.length > 1 ? `¿Borrar las ${g.cuotas} cuotas de "${g.descripcion || g.categoria}"?` : '¿Borrar este gasto?') + (enPersonal ? ' También se borra de Personal.' : ''))) return;
+    D.gastos = D.gastos.filter(x => !aBorrar.includes(x));
+    P().movs = P().movs.filter(m => !aBorrar.some(x => x.id === m.deFara));
     guardar(); cerrarHoja(); pintar(); toast('Borrado');
   },
   // trabajos
@@ -1030,6 +1035,7 @@ const ACC = {
     if (!confirm(`¿Pasar "${c.item}" al inventario y cargar el gasto de ${plata(c.precio, c.moneda)}?`)) return;
     D.equipo.push({ id: uid(), categoria: D.listas.equipo[0], item: c.item, usd: c.moneda === 'USD' ? c.precio : +(c.precio / mep()).toFixed(2), fechaCompra: hoyISO(), serie: '', nota: '' });
     D.gastos.push({ id: uid(), fecha: hoyISO(), fechaPago: hoyISO(), descripcion: c.item, categoria: D.listas.gasto.includes('Equipo') ? 'Equipo' : D.listas.gasto[0], monto: c.precio, moneda: c.moneda, medio: A().medioGasto, pagado: true, vence: '', mep: mep(), nota: 'Compra planeada' });
+    sincPersonal(D.gastos.at(-1));
     D.compras = D.compras.filter(x => x !== c);
     guardar(); cerrarHoja(); pintar(); toast('Listo: ya está en tu inventario');
   },
@@ -1190,7 +1196,6 @@ function tablas() {
     Compras: T(['id', 'Ítem', 'Precio', 'Moneda', 'Meses', 'Ahorrado', 'Por mes'],
       D.compras.map(c => [c.id, c.item, c.precio, c.moneda, c.meses, c.ahorrado, Math.round(planCompra(c).porMes * 100) / 100])),
     Clientes: T(['Código', 'Nombre'], D.clientes.map(c => [c.codigo, c.nombre])),
-    'Aportes del dueño': T(['Fecha', 'Monto', 'Moneda', 'Desde', 'Para qué'], (D.reservas ? D.reservas.aportes : []).map(x => [x.fecha, x.monto, x.moneda, x.medio, x.nota])),
     Reservas: T(['Tipo', 'Fecha', 'Monto', 'Movimiento', 'Nota'], (D.reservas ? D.reservas.movs : []).map(m => [TIPOS_RES[m.tipo].nombre, m.fecha, m.monto, m.monto < 0 ? 'Usado' : 'Apartado', m.nota])),
     'P · Movimientos': T(['id', 'Tipo', 'Fecha', 'Descripción', 'Categoría', 'Va a', 'Monto', 'Moneda', 'Compartido', 'Tu parte %', 'Tu parte $', 'Medio', 'Estado', 'Vence', 'Cuota', 'Fijo', 'Nota'],
       D.personal.movs.map(m => [m.id, m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto', fechaMov(m), m.descripcion, m.categoria, destinoTexto(m), m.monto, m.moneda, m.compartido ? 'Sí' : 'No', m.compartido ? m.parte : 100,
